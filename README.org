@@ -1,1 +1,50 @@
-* meow-purrsist
+#+title: meow-purrsist
+
+=meow-purrsist= lets [[https://github.com/meow-edit/meow][Meow]] selections keep their anchor while motion changes the active end. Select a word, symbol, block, or line, then extend or shrink it with movement. Reversing a selection moves the other end. It can also adopt an ordinary Emacs region, such as one made by another package.
+
+This package defines commands, not a keymap. Its optional global mode makes Meow's built-in thing selectors participate and preserves rectangle highlighting when Meow's cursor-position hack is enabled.
+
+* Install
+
+Requires Emacs 27.1 or newer and Meow 20260714.1200 or newer. With Emacs's built-in VC package manager:
+
+#+begin_src elisp
+(package-vc-install "https://github.com/suderman/meow-purrsist")
+#+end_src
+
+Alternatively, clone this repository and add its root to =load-path=. Then enable the integration and bind whichever commands you want:
+
+#+begin_src elisp
+(require 'meow-purrsist)
+(meow-purrsist-mode 1)
+(keymap-set meow-normal-state-keymap "m" #'meow-purrsist-visual)
+(keymap-set meow-normal-state-keymap "M" #'meow-purrsist-line-or-rectangle)
+(keymap-set meow-normal-state-keymap "j" #'meow-purrsist-next)
+(keymap-set meow-normal-state-keymap "k" #'meow-purrsist-prev)
+#+end_src
+
+These are example bindings, not defaults. Bind the word, symbol, find, till, and other motion commands below as needed. Enable the mode after loading Meow; it adds no keys. Disable it with =(meow-purrsist-mode -1)= to remove its advice.
+
+* Commands
+
+- =meow-purrsist-visual= selects a word, then a symbol, then an enclosing block on consecutive calls.
+- =meow-purrsist-line-or-rectangle= selects a line, then a rectangle, then the whole buffer on consecutive calls. While a rectangle is active, Meow's normal movement extends it.
+- =meow-purrsist-next= and =meow-purrsist-prev= move down and up. Line selections expand by physical line; other selections use Meow's motion.
+- =meow-purrsist-next-word=, =meow-purrsist-back-word=, =meow-purrsist-next-symbol=, and =meow-purrsist-back-symbol= move by word or symbol.
+- =meow-purrsist-next-word-start= and =meow-purrsist-next-symbol-start= move to the next start. A negative prefix moves backward.
+- =meow-purrsist-find=, =meow-purrsist-find-backward=, =meow-purrsist-till=, and =meow-purrsist-till-backward= move to or before a character. Without an active selection, they only move point.
+- =meow-purrsist-adopt-region= turns an active native region into a Meow selection, keeping its bounds and direction. =meow-purrsist-move-to= and =meow-purrsist-extend-with-motion= help custom motions retain the anchor.
+
+Fine endpoint movement does not add an entry to Meow's selection history. Semantic selections still do, so =meow-pop-selection= can return to earlier bounds.
+
+* Compatibility and tests
+
+Meow does not expose public functions for typed selections or their history. This package uses its private selection functions and redisplay backups; check compatibility when upgrading Meow.
+
+With Meow installed in Emacs's load path, run the standalone ERT suite from this repository:
+
+#+begin_src sh
+emacs --batch -L . -l test/meow-purrsist-test.el -f ert-run-tests-batch-and-exit
+#+end_src
+
+The package and tests need no personal Emacs configuration.
