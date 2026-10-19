@@ -132,27 +132,54 @@ Without a region, just run MOTION.  MOTION is a function of no arguments."
   (interactive "p")
   (meow-purrsist--next-start "w_" n))
 
+(defun meow-purrsist--line-start (pos)
+  "Return the start of the shown line holding POS.
+Hidden lines, such as a folded body, belong to the shown line above."
+  (save-excursion
+    (goto-char pos)
+    (forward-line 0)
+    (while (and (not (bobp)) (invisible-p (point)))
+      (forward-line -1))
+    (point)))
+
+(defun meow-purrsist--line-end (pos)
+  "Return the end of the shown line holding POS, past any hidden text."
+  (save-excursion
+    (goto-char pos)
+    (end-of-line)
+    (while (and (not (eobp)) (invisible-p (point)))
+      (goto-char (next-single-char-property-change (point) 'invisible))
+      (end-of-line))
+    (point)))
+
+(defun meow-purrsist--line-start-from (pos n)
+  "Return the start of the shown line N physical lines from POS."
+  (save-excursion
+    (goto-char (meow-purrsist--line-start pos))
+    (let ((step (if (< n 0) -1 1)))
+      (dotimes (_ (abs n))
+        (forward-line step)
+        (while (and (invisible-p (point)) (zerop (forward-line step))))))
+    (meow-purrsist--line-start (point))))
+
 (defun meow-purrsist--move-line-selection (n)
-  "Move the active line-selection endpoint N physical lines."
+  "Move the active line-selection endpoint N physical lines.
+Hidden lines are skipped, and a folded line is selected with its body."
   (let* ((anchor (mark))
-         (active (point))
-         (anchor-beg (save-excursion
-                       (goto-char anchor) (line-beginning-position)))
-         (anchor-end (save-excursion
-                       (goto-char anchor) (line-end-position)))
-         (target-beg (save-excursion
-                       (goto-char active) (forward-line n)
-                       (line-beginning-position)))
-         (target-end (save-excursion
-                       (goto-char active) (forward-line n)
-                       (line-end-position))))
+         (anchor-beg (meow-purrsist--line-start anchor))
+         (target-beg (meow-purrsist--line-start-from (point) n)))
     (cond
      ((> target-beg anchor-beg)
-      (meow-purrsist--select anchor-beg target-end '(expand . line)))
+      (meow-purrsist--select anchor-beg (meow-purrsist--line-end target-beg)
+                             '(expand . line)))
      ((< target-beg anchor-beg)
-      (meow-purrsist--select anchor-end target-beg '(expand . line)))
+      (meow-purrsist--select (meow-purrsist--line-end anchor) target-beg
+                             '(expand . line)))
      (t
-      (meow-purrsist--select anchor-beg anchor-end '(expand . line))))))
+      (meow-purrsist--select anchor-beg
+                             (save-excursion
+                               (goto-char anchor-beg) (line-end-position))
+                             '(expand . line))))))
 
 (defun meow-purrsist-next (arg)
   "Move down, adjusting line selections in physical direction."

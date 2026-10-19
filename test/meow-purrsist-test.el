@@ -154,6 +154,22 @@
     (should (<= (point-min) (region-beginning)))
     (should (<= (region-end) (point-max)))))
 
+(ert-deftest meow-purrsist-lines-skip-hidden-text ()
+  ;; Folded bodies follow "one" and "two", as Org and Hideshow hide them.
+  (meow-purrsist-test--buffer "one\nhidden\ntwo\nhidden2\nthree"
+    (overlay-put (make-overlay 4 11) 'invisible t)
+    (overlay-put (make-overlay 15 23) 'invisible t)
+    (meow-purrsist--select 1 4 '(expand . line))
+    (meow-purrsist-next 1)
+    (should (equal (cons (region-beginning) (region-end)) '(1 . 23)))
+    (meow-purrsist-next 1)
+    (should (equal (cons (region-beginning) (region-end)) '(1 . 29)))
+    (meow-purrsist-prev 2)
+    (should (equal (cons (region-beginning) (region-end)) '(1 . 4)))
+    (meow-purrsist--select 24 29 '(expand . line))
+    (meow-purrsist-prev 1)
+    (should (equal (cons (region-beginning) (region-end)) '(12 . 29)))))
+
 (ert-deftest meow-purrsist-line-rectangle-buffer-progression ()
   (meow-purrsist-test--buffer "one\ntwo\nthree"
     (goto-char 6)
