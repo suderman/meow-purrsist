@@ -162,9 +162,16 @@ Hidden lines, such as a folded body, belong to the shown line above."
         (while (and (invisible-p (point)) (zerop (forward-line step))))))
     (meow-purrsist--line-start (point))))
 
+(defun meow-purrsist--keep-line-end ()
+  "Keep point at a line end where hidden text begins, such as a fold.
+Emacs would otherwise move point out of the hidden text and back before
+the last shown character."
+  (setq disable-point-adjustment t))
+
 (defun meow-purrsist--move-line-selection (n)
   "Move the active line-selection endpoint N physical lines.
 Hidden lines are skipped, and a folded line is selected with its body."
+  (meow-purrsist--keep-line-end)
   (let* ((anchor (mark))
          (anchor-beg (meow-purrsist--line-start anchor))
          (target-beg (meow-purrsist--line-start-from (point) n)))
@@ -227,7 +234,8 @@ After the third call, further consecutive calls keep the block."
       (unless (= start (line-beginning-position))
         (goto-char start)))
     (setq meow-purrsist--line-position (point))
-    (meow-line n))
+    (meow-line n)
+    (meow-purrsist--keep-line-end))
    ((equal (meow--selection-type) '(expand . line))
     (meow--cancel-selection)
     (goto-char meow-purrsist--line-position)
