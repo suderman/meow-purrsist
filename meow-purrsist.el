@@ -222,6 +222,10 @@ After the third call, further consecutive calls keep the block."
    ((not (eq last-command 'meow-purrsist-line-or-rectangle))
     (when (bound-and-true-p rectangle-mark-mode)
       (rectangle-mark-mode -1))
+    ;; Point past a folded line's hidden body sits on a hidden line.
+    (let ((start (meow-purrsist--line-start (point))))
+      (unless (= start (line-beginning-position))
+        (goto-char start)))
     (setq meow-purrsist--line-position (point))
     (meow-line n))
    ((equal (meow--selection-type) '(expand . line))

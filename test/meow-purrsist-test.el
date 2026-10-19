@@ -168,7 +168,13 @@
     (should (equal (cons (region-beginning) (region-end)) '(1 . 4)))
     (meow-purrsist--select 24 29 '(expand . line))
     (meow-purrsist-prev 1)
-    (should (equal (cons (region-beginning) (region-end)) '(12 . 29)))))
+    (should (equal (cons (region-beginning) (region-end)) '(12 . 29)))
+    ;; A click after a folded line leaves point at the end of its body.
+    (deactivate-mark)
+    (goto-char 23)
+    (let ((last-command nil))
+      (meow-purrsist-line-or-rectangle 1))
+    (should (= (region-beginning) 12))))
 
 (ert-deftest meow-purrsist-line-rectangle-buffer-progression ()
   (meow-purrsist-test--buffer "one\ntwo\nthree"
