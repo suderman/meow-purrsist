@@ -2,7 +2,7 @@
 
 =meow-purrsist= lets [[https://github.com/meow-edit/meow][Meow]] selections keep their anchor while motion changes the active end. Select a word, symbol, block, or line, then extend or shrink it with movement. Reversing a selection moves the other end. It can also adopt an ordinary Emacs region, such as one made by another package.
 
-This package defines commands, not a keymap. Its optional global mode makes Meow's built-in thing selectors participate and preserves rectangle highlighting when Meow's cursor-position hack is enabled.
+This package defines commands, not a keymap. Its optional global mode makes Meow's built-in thing selectors, [[https://github.com/mkleehammer/surround][Surround]], and touch-screen word selection participate, and preserves rectangle highlighting when Meow's cursor-position hack is enabled.
 
 * Install
 
@@ -33,7 +33,10 @@ These are example bindings, not defaults. Bind the word, symbol, find, till, and
 - =meow-purrsist-next-word=, =meow-purrsist-back-word=, =meow-purrsist-next-symbol=, and =meow-purrsist-back-symbol= move by word or symbol.
 - =meow-purrsist-next-word-start= and =meow-purrsist-next-symbol-start= move to the next start. A negative prefix moves backward.
 - =meow-purrsist-find=, =meow-purrsist-find-backward=, =meow-purrsist-till=, and =meow-purrsist-till-backward= move to or before a character. Without an active selection, they only move point.
-- =meow-purrsist-adopt-region= turns an active native region into a Meow selection, keeping its bounds and direction. =meow-purrsist-move-to= and =meow-purrsist-extend-with-motion= help custom motions retain the anchor.
+- =meow-purrsist-repeat= repeats the last find or till. After any other command it calls =meow-purrsist-repeat-function= with the count, for example =repeat= or an edit-repeat package's command.
+- =meow-purrsist-beginning-of-line= moves to the indentation, then to the line beginning. =meow-purrsist-end-of-line= stops before a trailing comment, then at the line end. =meow-purrsist-beginning-of-buffer=, =meow-purrsist-end-of-buffer=, and =meow-purrsist-end-or-beginning-of-buffer= move to the buffer's edges. All of them extend an active selection.
+- =meow-purrsist-isearch= searches incrementally for literal text and selects the match. A lowercase query ignores case, including in later searches. =meow-purrsist-search= and =meow-purrsist-search-backward= then select the next or previous match; when the selected text is not a match, they search for that text instead.
+- =meow-purrsist-adopt-region= turns an active native region into a Meow selection, keeping its bounds and direction. =meow-purrsist-mode= applies it in Normal state after Surround marks a pair's contents and after a long press selects a word on a touch screen. =meow-purrsist-move-to= and =meow-purrsist-extend-with-motion= help custom motions retain the anchor.
 
 Fine endpoint movement does not add an entry to Meow's selection history. Semantic selections still do, so =meow-pop-selection= can return to earlier bounds.
 

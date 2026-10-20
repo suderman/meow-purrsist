@@ -1,7 +1,7 @@
 ;;; meow-purrsist.el --- Persistent selections for Meow -*- lexical-binding: t; -*-
 
 ;; Author: Jon Suderman
-;; Version: 0.1.0
+;; Version: 0.2.0
 ;; Package-Requires: ((emacs "27.1") (meow "20260714.1200"))
 ;; Keywords: convenience, editing
 ;; URL: https://github.com/suderman/meow-purrsist
@@ -15,12 +15,15 @@
 ;; not add a history entry for each endpoint change; semantic selections do.
 ;;
 ;; `meow-purrsist-adopt-region' also accepts native Emacs regions, including
-;; regions produced by other packages.  Bind the commands you want directly;
-;; `meow-purrsist-mode' only makes Meow's thing selectors enter this model.
+;; regions produced by other packages.  Searches, line and buffer motions,
+;; and find or till repeats follow the same model.  Bind the commands you
+;; want directly; `meow-purrsist-mode' only makes Meow's thing selectors,
+;; Surround, and touch selection enter this model.
 ;;
 ;; Meow has no public API for constructing typed selections or maintaining
 ;; their history.  This package uses its private selection constructors,
-;; selection type, history-free update, cancellation, and redisplay backups.
+;; selection type, history-free update, cancellation, direction, search
+;; ring and highlighting, and redisplay backups.
 ;; The minimum Meow release includes these internals.  Check compatibility when
 ;; upgrading Meow.
 
@@ -48,7 +51,10 @@
 
 (dolist (function '(meow--make-selection meow--select
                     meow--select-without-history meow--selection-type
-                    meow--cancel-selection))
+                    meow--cancel-selection meow--direction-forward
+                    meow--direction-backward meow--push-search
+                    meow--highlight-regexp-in-buffer
+                    meow--remove-search-indicator))
   (unless (fboundp function)
     (error "meow-purrsist requires Meow capability %s" function)))
 (dolist (variable '(meow--selection meow--selection-history
@@ -147,6 +153,53 @@ Without a region, just run MOTION.  MOTION is a function of no arguments."
   "Move to the start of the next N symbols, extending a selection."
   (interactive "p")
   (meow-purrsist--next-start "w_" n))
+
+(defun meow-purrsist-beginning-of-line ()
+  "Move to indentation, or to the line beginning when already there.
+Extend an active selection."
+  (interactive)
+  (meow-purrsist-move-to
+   (save-excursion
+     (let ((origin (point)))
+       (back-to-indentation)
+       (if (= origin (point)) (line-beginning-position) (point))))))
+
+(defun meow-purrsist-end-of-line ()
+  "Move to the end of code before a trailing comment, else the line end.
+At the end of code, move on to the line end.  Extend an active selection."
+  (interactive)
+  (let* ((eol (line-end-position))
+         (code-end (save-excursion
+                     (comment-normalize-vars)
+                     (goto-char eol)
+                     (when-let* ((comment (comment-beginning)))
+                       (goto-char comment)
+                       (skip-chars-backward " \t")
+                       (point)))))
+    (meow-purrsist-move-to
+     (if (and code-end
+              (> code-end (line-beginning-position))
+              (< (point) code-end))
+         code-end
+       eol))))
+
+(defun meow-purrsist-beginning-of-buffer ()
+  "Move to the beginning of the buffer, extending an active selection."
+  (interactive)
+  (meow-purrsist-move-to (point-min)))
+
+(defun meow-purrsist-end-of-buffer ()
+  "Move to the end of the buffer, extending an active selection."
+  (interactive)
+  (meow-purrsist-move-to (point-max)))
+
+(defun meow-purrsist-end-or-beginning-of-buffer ()
+  "Move to the buffer end, or the beginning when already on the last line.
+Extend an active selection."
+  (interactive)
+  (if (= (line-end-position) (point-max))
+      (meow-purrsist-beginning-of-buffer)
+    (meow-purrsist-end-of-buffer)))
 
 (defun meow-purrsist--line-start (pos)
   "Return the start of the shown line holding POS.
@@ -506,21 +559,111 @@ candidate, further calls keep the selection."
   (interactive "p\ncTill backward: ")
   (meow-purrsist-till (- n) char))
 
+(defcustom meow-purrsist-repeat-function nil
+  "Function `meow-purrsist-repeat' calls with the count to repeat an edit.
+It runs when the last command was not a find or till.  When nil, there
+is nothing else to repeat."
+  :type '(choice (const :tag "None" nil) function)
+  :group 'meow)
+
+(defun meow-purrsist-repeat (n)
+  "Repeat the last find or till motion N times.
+After any other command, call `meow-purrsist-repeat-function' with N."
+  (interactive "p")
+  (let ((char (pcase last-command
+                ((or 'meow-purrsist-find 'meow-purrsist-find-backward)
+                 meow--last-find)
+                ((or 'meow-purrsist-till 'meow-purrsist-till-backward)
+                 meow--last-till))))
+    (cond
+     (char
+      (setq this-command last-command)
+      (funcall last-command n char))
+     (meow-purrsist-repeat-function
+      (funcall meow-purrsist-repeat-function n))
+     (t (user-error "Nothing to repeat")))))
+
+(defun meow-purrsist--smartcase-regexp (string)
+  "Return a regexp for STRING that ignores case when STRING is lowercase.
+Meow searches with `case-fold-search' nil, so its search motions need
+the case folding written into the regexp."
+  (if (string= string (downcase string))
+      (mapconcat (lambda (char)
+                   (if (= char (upcase char))
+                       (regexp-quote (char-to-string char))
+                     (regexp-opt-charset (list char (upcase char)))))
+                 string "")
+    (regexp-quote string)))
+
+(defun meow-purrsist--finish-isearch ()
+  "Select a successful Isearch match and hand it to Meow's search motions."
+  (remove-hook 'isearch-mode-end-hook #'meow-purrsist--finish-isearch t)
+  (when (and (not isearch-mode-end-hook-quit)
+             isearch-success
+             (not (string-empty-p isearch-string))
+             isearch-other-end)
+    (meow--push-search (meow-purrsist--smartcase-regexp isearch-string))
+    (set-mark isearch-other-end)
+    (activate-mark)
+    (meow-purrsist-adopt-region)
+    (meow--highlight-regexp-in-buffer (car regexp-search-ring))))
+
+(defun meow-purrsist-isearch ()
+  "Search incrementally for literal text, then select the match.
+A lowercase query ignores case.  `meow-purrsist-search' and
+`meow-purrsist-search-backward' then step through the matches."
+  (interactive)
+  (when (region-active-p)
+    (meow--cancel-selection))
+  (meow--remove-search-indicator)
+  (add-hook 'isearch-mode-end-hook #'meow-purrsist--finish-isearch nil t)
+  (let ((case-fold-search t)
+        (search-upper-case t)
+        (search-default-mode nil))
+    (isearch-forward)))
+
+(defun meow-purrsist-search (&optional backward)
+  "Select the next match of the last search, or the previous if BACKWARD.
+When the selected text is not a match, search for that text instead.
+Searches wrap, and the match can then be adjusted by motion."
+  (interactive)
+  (let ((selecting (region-active-p)))
+    (when selecting
+      (if backward (meow--direction-backward) (meow--direction-forward)))
+    (meow-search (and backward (not selecting) -1)))
+  (meow-purrsist-adopt-region))
+
+(defun meow-purrsist-search-backward ()
+  "Select the previous match of the last search."
+  (interactive)
+  (meow-purrsist-search t))
+
 (defun meow-purrsist--adopt-meow-thing (&rest _)
   "Make a newly selected Meow thing adjustable by ordinary motion."
   (when (region-active-p)
+    (meow-purrsist-adopt-region)))
+
+(defun meow-purrsist--adopt-normal-region (&rest _)
+  "Make a region another package selected adjustable in Normal state."
+  (when (bound-and-true-p meow-normal-mode)
     (meow-purrsist-adopt-region)))
 
 (defconst meow-purrsist--thing-commands
   '(meow-beginning-of-thing meow-end-of-thing
     meow-inner-of-thing meow-bounds-of-thing))
 
+(defconst meow-purrsist--region-commands
+  '(surround--op-mark touch-screen-hold)
+  "Commands from other packages whose regions Normal state adopts.
+Surround marks a pair's contents, and a long press on a touch screen
+selects a word.")
+
 (defvar meow-purrsist--rectangle-highlight-added nil)
 (defvar meow-purrsist--rectangle-unhighlight-added nil)
 
 ;;;###autoload
 (define-minor-mode meow-purrsist-mode
-  "Keep Meow thing selections adjustable and rectangles visible.
+  "Keep thing, Surround, and touch selections adjustable; show rectangles.
 This global integration installs narrow advice; it does not bind keys."
   :global t
   :group 'meow
@@ -530,6 +673,10 @@ This global integration installs narrow advice; it does not bind keys."
           (advice-remove command #'meow-purrsist--adopt-meow-thing)
           (advice-add command :after #'meow-purrsist--adopt-meow-thing))
       (advice-remove command #'meow-purrsist--adopt-meow-thing)))
+  (dolist (command meow-purrsist--region-commands)
+    (if meow-purrsist-mode
+        (advice-add command :after #'meow-purrsist--adopt-normal-region)
+      (advice-remove command #'meow-purrsist--adopt-normal-region)))
   ;; Meow replaces the redisplay functions used by rectangle-mark-mode when
   ;; its cursor-position hack is on.  Keep rectangle rendering in its backups.
   (if meow-purrsist-mode
