@@ -27,7 +27,7 @@ These are example bindings, not defaults. Bind the word, symbol, find, till, and
 
 * Commands
 
-- =meow-purrsist-visual= selects a word, then a symbol, then an enclosing block on consecutive calls.
+- =meow-purrsist-visual= selects a word, then grows on consecutive calls to the smallest enclosing symbol, string, bracket, sentence, paragraph, function, or outline subtree. Org elements (markup, list items, drawers, blocks, and headings) offer their contents and then themselves. Tree-sitter nodes with delimiter children, such as Markdown code spans and emphasis, add their inside and then their markers. File paths offer the name without extensions, the file name, and the whole path. Inside Org blocks and Markdown fences, the current line and the block contents replace sentences and paragraphs. Code offers functions; prose offers sentences and paragraphs. Each step is recorded, so =meow-pop-selection= steps back.
 - =meow-purrsist-line-or-rectangle= selects a line, then a rectangle, then the whole buffer on consecutive calls. While a rectangle is active, Meow's normal movement extends it.
 - =meow-purrsist-next= and =meow-purrsist-prev= move down and up. Line selections expand by physical line; other selections use Meow's motion.
 - =meow-purrsist-next-word=, =meow-purrsist-back-word=, =meow-purrsist-next-symbol=, and =meow-purrsist-back-symbol= move by word or symbol.

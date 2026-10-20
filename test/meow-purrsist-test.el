@@ -121,6 +121,9 @@
     (should (equal (cons (region-beginning) (region-end)) '(2 . 12)))
     (let ((last-command 'meow-purrsist-visual))
       (meow-purrsist-visual))
+    (should (equal (cons (region-beginning) (region-end)) '(2 . 18)))
+    (let ((last-command 'meow-purrsist-visual))
+      (meow-purrsist-visual))
     (should (equal (cons (region-beginning) (region-end)) '(1 . 19)))
     (let ((last-command 'meow-purrsist-visual))
       (meow-purrsist-visual))
@@ -132,8 +135,123 @@
     (goto-char 3)
     (let ((last-command 'meow-purrsist-next-word))
       (meow-purrsist-visual))
-    (should (= meow-purrsist--visual-stage 1))
+    (should (equal (cons (region-beginning) (region-end)) '(2 . 7)))
     (should (equal (meow--selection-type) '(expand . char)))))
+
+(ert-deftest meow-purrsist-visual-grows-through-prose-and-pops-back ()
+  (let ((transient-mark-mode t)
+        (meow--selection-history nil)
+        (sentence-end-double-space nil))
+    (with-temp-buffer
+      (outline-mode)
+      (insert "* Top\n** Sub\nOne here. Two (big cat) now.\n\nNext.\n")
+      (goto-char (point-min))
+      (search-forward "big")
+      (let ((last-command nil))
+        (meow-purrsist-visual))
+      (dolist (expected '("big cat" "(big cat)" "Two (big cat) now."
+                          "One here. Two (big cat) now."
+                          "** Sub\nOne here. Two (big cat) now.\n\nNext."))
+        (let ((last-command 'meow-purrsist-visual))
+          (meow-purrsist-visual))
+        (should (equal (buffer-substring (region-beginning) (region-end))
+                       expected)))
+      (meow-pop-selection)
+      (should (equal (buffer-substring (region-beginning) (region-end))
+                     "One here. Two (big cat) now.")))))
+
+(ert-deftest meow-purrsist-visual-takes-symbol-inside-markup-first ()
+  (let ((transient-mark-mode t)
+        (meow--selection-history nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "See /either/or/ now.")
+      (goto-char 8)
+      (let ((last-command nil))
+        (meow-purrsist-visual))
+      (dolist (expected '("either/or" "/either/or/"))
+        (let ((last-command 'meow-purrsist-visual))
+          (meow-purrsist-visual))
+        (should (equal (buffer-substring (region-beginning) (region-end))
+                       expected))))))
+
+(ert-deftest meow-purrsist-visual-grows-through-org-markup ()
+  (let ((transient-mark-mode t)
+        (meow--selection-history nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "See *bold =code= text* now.")
+      (goto-char 13)
+      (let ((last-command nil))
+        (meow-purrsist-visual))
+      (dolist (expected '("=code=" "bold =code= text" "*bold =code= text*"))
+        (let ((last-command 'meow-purrsist-visual))
+          (meow-purrsist-visual))
+        (should (equal (buffer-substring-no-properties
+                        (region-beginning) (region-end))
+                       expected))))))
+
+(ert-deftest meow-purrsist-visual-grows-through-markdown-markup ()
+  (skip-unless (and (fboundp 'treesit-language-available-p)
+                    (treesit-language-available-p 'markdown)
+                    (treesit-language-available-p 'markdown-inline)
+                    (require 'markdown-ts-mode nil t)))
+  (let ((transient-mark-mode t)
+        (meow--selection-history nil))
+    (with-temp-buffer
+      (insert "See **bold `code/` x** now.\n")
+      (markdown-ts-mode)
+      (font-lock-ensure)
+      (goto-char 13)
+      (let ((last-command nil))
+        (meow-purrsist-visual))
+      (dolist (expected '("code/" "`code/`" "bold `code/` x" "**bold `code/` x**"))
+        (let ((last-command 'meow-purrsist-visual))
+          (meow-purrsist-visual))
+        (should (equal (buffer-substring-no-properties
+                        (region-beginning) (region-end))
+                       expected))))))
+
+(ert-deftest meow-purrsist-visual-grows-through-paths-and-org-blocks ()
+  (let ((transient-mark-mode t)
+        (meow--selection-history nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "Text.\n#+begin_src sh\necho one\npython scripts/make_it.py --x\n#+end_src\n")
+      (goto-char (point-min))
+      (search-forward "mak")
+      (let ((last-command nil))
+        (meow-purrsist-visual))
+      (dolist (expected '("make_it" "make_it.py" "scripts/make_it.py"
+                          "python scripts/make_it.py --x"
+                          "echo one\npython scripts/make_it.py --x"
+                          "#+begin_src sh\necho one\npython scripts/make_it.py --x\n#+end_src"))
+        (let ((last-command 'meow-purrsist-visual))
+          (meow-purrsist-visual))
+        (should (equal (buffer-substring-no-properties
+                        (region-beginning) (region-end))
+                       expected))))))
+
+(ert-deftest meow-purrsist-visual-grows-through-org-drawers-and-headings ()
+  (let ((transient-mark-mode t)
+        (meow--selection-history nil)
+        (case-fold-search nil))
+    (with-temp-buffer
+      (org-mode)
+      (insert "* Task\n:PROPERTIES:\n:DIR: ~/a/b\n:END:\nBody.\n* Next\n")
+      (goto-char (point-min))
+      (search-forward "~/a/")
+      (let ((last-command nil))
+        (meow-purrsist-visual))
+      (dolist (expected '("~/a/b" ":DIR: ~/a/b"
+                          ":PROPERTIES:\n:DIR: ~/a/b\n:END:"
+                          ":PROPERTIES:\n:DIR: ~/a/b\n:END:\nBody."
+                          "* Task\n:PROPERTIES:\n:DIR: ~/a/b\n:END:\nBody."))
+        (let ((last-command 'meow-purrsist-visual))
+          (meow-purrsist-visual))
+        (should (equal (buffer-substring-no-properties
+                        (region-beginning) (region-end))
+                       expected))))))
 
 (ert-deftest meow-purrsist-lines-move-physically-and-reverse ()
   (meow-purrsist-test--buffer "one\ntwo\nthree\nfour"
