@@ -449,6 +449,31 @@
         (execute-kbd-macro (kbd "n"))
         (should (= (region-beginning) 1))))))
 
+(ert-deftest meow-purrsist-isearch-closes-or-opens-searched-folds ()
+  ;; Org's folds are overlays like this one.  A recursive edit used to skip
+  ;; `isearch-clean-overlays' and leave them shown but still folded.
+  (let ((transient-mark-mode t)
+        (meow--selection-history nil)
+        (regexp-search-ring nil)
+        (search-invisible 'open)
+        (map (make-sparse-keymap)))
+    (keymap-set map "/" #'meow-purrsist-isearch)
+    (save-window-excursion
+      (dolist (case '(("/ x RET" . opened) ("/ x C-s RET" . hidden)))
+        (with-temp-buffer
+          (set-window-buffer (selected-window) (current-buffer))
+          (use-local-map map)
+          (insert "aaa hidden-x bbb x")
+          (let ((fold (make-overlay 5 13)))
+            (overlay-put fold 'invisible t)
+            (overlay-put fold 'isearch-open-invisible #'delete-overlay)
+            (goto-char (point-min))
+            (execute-kbd-macro (kbd (car case)))
+            (if (eq (cdr case) 'opened)
+                (should-not (overlay-buffer fold))
+              (should (eq (overlay-get fold 'invisible) t))
+              (should (= (region-end) 19)))))))))
+
 (ert-deftest meow-purrsist-search-finds-selected-text-and-wraps ()
   (meow-purrsist-test--buffer "alpha beta alpha beta"
     (let ((regexp-search-ring (list "beta")))

@@ -617,10 +617,12 @@ A lowercase query ignores case.  `meow-purrsist-search' and
     (meow--cancel-selection))
   (meow--remove-search-indicator)
   (add-hook 'isearch-mode-end-hook #'meow-purrsist--finish-isearch nil t)
+  ;; No recursive edit, as for interactive C-s.  Leaving one skips the
+  ;; rest of `isearch-exit', which closes or opens folds the search showed.
   (let ((case-fold-search t)
         (search-upper-case t)
         (search-default-mode nil))
-    (isearch-forward)))
+    (isearch-forward nil t)))
 
 (defun meow-purrsist-search (&optional backward)
   "Select the next match of the last search, or the previous if BACKWARD.
