@@ -201,13 +201,20 @@ Extend an active selection."
       (meow-purrsist-beginning-of-buffer)
     (meow-purrsist-end-of-buffer)))
 
+(defun meow-purrsist--hidden-line-p (bol)
+  "Return non-nil if the line starting at BOL shows on the line above.
+Its start may be hidden, or only the newline before it, as for the blank
+line Org leaves after a folded body."
+  (or (invisible-p bol)
+      (and (> bol (point-min)) (invisible-p (1- bol)))))
+
 (defun meow-purrsist--line-start (pos)
   "Return the start of the shown line holding POS.
 Hidden lines, such as a folded body, belong to the shown line above."
   (save-excursion
     (goto-char pos)
     (forward-line 0)
-    (while (and (not (bobp)) (invisible-p (point)))
+    (while (and (not (bobp)) (meow-purrsist--hidden-line-p (point)))
       (forward-line -1))
     (point)))
 
@@ -228,7 +235,8 @@ Hidden lines, such as a folded body, belong to the shown line above."
     (let ((step (if (< n 0) -1 1)))
       (dotimes (_ (abs n))
         (forward-line step)
-        (while (and (invisible-p (point)) (zerop (forward-line step))))))
+        (while (and (meow-purrsist--hidden-line-p (point))
+                    (zerop (forward-line step))))))
     (meow-purrsist--line-start (point))))
 
 (defun meow-purrsist--keep-line-end ()

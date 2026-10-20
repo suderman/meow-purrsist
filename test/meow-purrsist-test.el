@@ -294,6 +294,19 @@
       (meow-purrsist-line-or-rectangle 1))
     (should (= (region-beginning) 12))))
 
+(ert-deftest meow-purrsist-lines-skip-blank-line-after-fold ()
+  ;; Org hides a folded body through its last newline, so the blank line
+  ;; after it shows on the heading's line.  Moving up from "two" used to
+  ;; stop on that blank line.
+  (meow-purrsist-test--buffer "one\nhidden\n\ntwo"
+    (overlay-put (make-overlay 4 12) 'invisible t)
+    (meow-purrsist--select 13 16 '(expand . line))
+    (meow-purrsist-prev 1)
+    (should (equal (cons (region-beginning) (region-end)) '(1 . 16)))
+    (meow-purrsist--select 1 4 '(expand . line))
+    (meow-purrsist-next 1)
+    (should (equal (cons (region-beginning) (region-end)) '(1 . 16)))))
+
 (ert-deftest meow-purrsist-line-rectangle-buffer-progression ()
   (meow-purrsist-test--buffer "one\ntwo\nthree"
     (goto-char 6)
