@@ -1,5 +1,8 @@
 ;;; meow-purrsist-test.el --- Persistent selection checks -*- lexical-binding: t; -*-
 
+;; Copyright (C) 2026 Jon Suderman
+;; SPDX-License-Identifier: GPL-3.0-or-later
+
 ;;; Code:
 
 (require 'ert)

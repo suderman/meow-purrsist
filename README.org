@@ -51,3 +51,7 @@ emacs --batch -L . -l test/meow-purrsist-test.el -f ert-run-tests-batch-and-exit
 #+end_src
 
 The package and tests need no personal Emacs configuration.
+
+* License
+
+GPL-3.0-or-later, like Emacs and Meow. See [[file:LICENSE][LICENSE]].
