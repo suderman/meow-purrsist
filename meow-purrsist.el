@@ -32,6 +32,7 @@
 (require 'meow)
 (require 'rect)
 (require 'seq)
+(require 'subr-x)
 
 (declare-function outline-back-to-heading "outline")
 (declare-function outline-end-of-subtree "outline")
@@ -56,18 +57,20 @@
                     meow--highlight-regexp-in-buffer
                     meow--remove-search-indicator))
   (unless (fboundp function)
-    (error "meow-purrsist requires Meow capability %s" function)))
+    (error "Meow lacks %s, which meow-purrsist requires" function)))
 (dolist (variable '(meow--selection meow--selection-history
                     meow--last-find meow--last-till))
   (unless (boundp variable)
-    (error "meow-purrsist requires Meow state %s" variable)))
+    (error "Meow lacks %s, which meow-purrsist requires" variable)))
 
-(defvar-local meow-purrsist--line-position nil)
+(defvar-local meow-purrsist--line-position nil
+  "Point where `meow-purrsist-line-or-rectangle' began a line selection.
+The rectangle that follows on the next call starts here.")
 
 (defun meow-purrsist--select (anchor target &optional type history)
   "Select from ANCHOR to TARGET with TYPE, recording HISTORY if non-nil."
   (let ((selection (meow--make-selection (or type '(expand . char))
-                                          anchor target)))
+                                         anchor target)))
     (if history
         (meow--select selection t)
       (meow--select-without-history selection))))
@@ -266,14 +269,14 @@ Hidden lines are skipped, and a folded line is selected with its body."
                              '(expand . line))))))
 
 (defun meow-purrsist-next (arg)
-  "Move down, adjusting line selections in physical direction."
+  "Move down ARG lines, adjusting line selections in physical direction."
   (interactive "P")
   (if (equal (meow--selection-type) '(expand . line))
       (meow-purrsist--move-line-selection (prefix-numeric-value arg))
     (meow-next arg)))
 
 (defun meow-purrsist-prev (arg)
-  "Move up, adjusting line selections in physical direction."
+  "Move up ARG lines, adjusting line selections in physical direction."
   (interactive "P")
   (if (equal (meow--selection-type) '(expand . line))
       (meow-purrsist--move-line-selection (- (prefix-numeric-value arg)))
@@ -310,6 +313,10 @@ Only text with a slash or dot counts as a path."
                  (string-match-p "[/.]" (buffer-substring (car bounds) (point))))
         (cons (car bounds) (point))))))
 
+(defun meow-purrsist--treesit-parsers ()
+  "Return the buffer's tree-sitter parsers, or nil without tree-sitter."
+  (and (fboundp 'treesit-parser-list) (treesit-parser-list)))
+
 (defun meow-purrsist--in-code-block-p (pos)
   "Return non-nil if POS is in an Org block or a tree-sitter code block."
   (if (derived-mode-p 'org-mode)
@@ -317,15 +324,14 @@ Only text with a slash or dot counts as a path."
         (goto-char pos)
         (memq (org-element-type (org-element-at-point))
               '(src-block example-block export-block comment-block)))
-    (when (and (fboundp 'treesit-parser-list) (treesit-parser-list))
-      (seq-some
-       (lambda (parser)
-         (let ((node (treesit-node-at pos parser)))
-           (while (and node (not (string-match-p
-                                  "code_block" (treesit-node-type node))))
-             (setq node (treesit-node-parent node)))
-           node))
-       (treesit-parser-list)))))
+    (seq-some
+     (lambda (parser)
+       (let ((node (treesit-node-at pos parser)))
+         (while (and node (not (string-match-p
+                                "code_block" (treesit-node-type node))))
+           (setq node (treesit-node-parent node)))
+         node))
+     (meow-purrsist--treesit-parsers))))
 
 (defun meow-purrsist--delimiter-node-p (node)
   "Return non-nil if NODE delimits its parent, like a fence or backtick.
@@ -336,11 +342,11 @@ A fenced code block's info string belongs to its opening fence."
   "Return bounds of tree-sitter nodes at POS wrapped in delimiter nodes.
 Each node gives its inside, then itself.  Markdown code spans, emphasis,
 and fenced code blocks mark their delimiters this way."
-  (when (and (fboundp 'treesit-parser-list) (treesit-parser-list))
+  (when-let* ((parsers (meow-purrsist--treesit-parsers)))
     (let (candidates)
       (dolist (parser (append (and (fboundp 'treesit-local-parsers-at)
                                    (treesit-local-parsers-at pos))
-                              (treesit-parser-list)))
+                              parsers))
         (let ((node (treesit-node-at pos parser)))
           (while node
             (let ((children (treesit-node-children node))
@@ -534,6 +540,8 @@ candidate, further calls keep the selection."
         ;; Meow records the temporary find selection.  Keep only the prior
         ;; semantic history when this is an endpoint movement.
         (history meow--selection-history))
+    ;; Forget the previous character, so a failed search leaves nothing
+    ;; for `meow-purrsist-repeat' to repeat.
     (if (eq command 'meow-find)
         (setq meow--last-find nil)
       (setq meow--last-till nil))
@@ -679,9 +687,7 @@ This global integration installs narrow advice; it does not bind keys."
   :group 'meow
   (dolist (command meow-purrsist--thing-commands)
     (if meow-purrsist-mode
-        (progn
-          (advice-remove command #'meow-purrsist--adopt-meow-thing)
-          (advice-add command :after #'meow-purrsist--adopt-meow-thing))
+        (advice-add command :after #'meow-purrsist--adopt-meow-thing)
       (advice-remove command #'meow-purrsist--adopt-meow-thing)))
   (dolist (command meow-purrsist--region-commands)
     (if meow-purrsist-mode

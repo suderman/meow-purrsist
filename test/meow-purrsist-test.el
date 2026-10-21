@@ -511,6 +511,11 @@
       (let ((last-command 'meow-purrsist-find))
         (meow-purrsist-repeat 1))
       (should (= (point) 7))
+      ;; A failed find leaves nothing to repeat, not the earlier character.
+      (meow-purrsist-find 1 ?z)
+      (let ((last-command 'meow-purrsist-find))
+        (should-error (meow-purrsist-repeat 1) :type 'user-error))
+      (should (= (point) 7))
       (let ((last-command 'self-insert-command))
         (should-error (meow-purrsist-repeat 1) :type 'user-error)
         (let* ((counts nil)

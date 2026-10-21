@@ -23,7 +23,7 @@ Alternatively, clone this repository and add its root to =load-path=. Then enabl
 (keymap-set meow-normal-state-keymap "k" #'meow-purrsist-prev)
 #+end_src
 
-These are example bindings, not defaults. Bind the word, symbol, find, till, and other motion commands below as needed. Enable the mode after loading Meow; it adds no keys. Disable it with =(meow-purrsist-mode -1)= to remove its advice.
+These are example bindings, not defaults. =keymap-set= needs Emacs 29; on older versions use =define-key= with =kbd=. Bind the word, symbol, find, till, and other motion commands below as needed. Enable the mode after loading Meow; it adds no keys. Disable it with =(meow-purrsist-mode -1)= to remove its advice.
 
 * Commands
 
